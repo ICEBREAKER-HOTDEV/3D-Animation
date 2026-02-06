@@ -13,15 +13,18 @@
 // ============================================================================
 
 const API_CONFIG = {
-    // API endpoint
-    endpoint: 'https://api-staging-buildot.machinesensiot.xyz/api/Dashboard/GetAssetDevicesData',
+    // API endpoints
+    authEndpoint: 'https://dev.auth.machinesensiot.com/api/Auth/Login',
+    dataEndpoint: 'https://api-staging-buildot.machinesensiot.xyz/api/Dashboard/GetAssetDevicesData',
 
     // Asset ID to fetch
     assetId: 6141,
 
-    // Bearer token (update this when it expires)
-    // Token expires at: 2025-02-06 (based on JWT exp: 1770375045)
-    bearerToken: 'eyJhbGciOiJSUzI1NiIsInR5cCIgOiAiSldUIiwia2lkIiA6ICJkUWFJTXd0c3VxSGdyaW9vdmNVTnZtUFRkcGUxa3RvNk53QVFLS2hOX0RJIn0.eyJleHAiOjE3NzAzNzUwNDUsImlhdCI6MTc3MDM2NDI0NSwianRpIjoiZTE3YWQxOGQtZGQ1NS00ODMxLThmZGMtMTFhZWFkZDRhYjgwIiwiaXNzIjoiaHR0cHM6Ly9kZXYuY2xvYWsubWFjaGluZXNlbnNpb3QuY29tL3JlYWxtcy9tc1NhbmRib3giLCJhdWQiOiJhY2NvdW50Iiwic3ViIjoiZDYyYjJhZmYtZjJjZS00NWZiLWFjNjQtNTQyNjdlMmM2ZWE2IiwidHlwIjoiQmVhcmVyIiwiYXpwIjoibXNTYW5kYm94X21haW5hcHAiLCJzaWQiOiI0MWI3MTUyNS1hNDBhLTRiZWItOTQ1Ny02MjQwOTE2NmRmMWMiLCJhY3IiOiIxIiwiYWxsb3dlZC1vcmlnaW5zIjpbImh0dHBzOi8vYXBpLmlvdC5tYWNoaW5lc2Vuc2lvdC5jb20iLCJodHRwczovL3N0YWdpbmcubWFjaGluZXNlbnMuY29tIiwiaHR0cHM6Ly9sb2NhbGhvc3Q6NTAzMyIsImh0dHA6Ly9sb2NhbGhvc3Q6ODA4MSIsImh0dHA6Ly9sb2NhbGhvc3Q6NTAwMCIsImh0dHBzOi8vZW1zLm1hY2hpbmVzZW5zaW90Lm5ldCIsImh0dHA6Ly9sb2NhbGhvc3Q6MzAwMSIsImh0dHBzOi8vbWFjaGluZXNlbnMuY29tIiwiaHR0cDovL2xvY2FsaG9zdDozMDAwIl0sInJlYWxtX2FjY2VzcyI6eyJyb2xlcyI6WyJvZmZsaW5lX2FjY2VzcyIsInVtYV9hdXRob3JpemF0aW9uIiwiZGVmYXVsdC1yb2xlcy1tc3NhbmRib3giXX0sInJlc291cmNlX2FjY2VzcyI6eyJhY2NvdW50Ijp7InJvbGVzIjpbIm1hbmFnZS1hY2NvdW50IiwibWFuYWdlLWFjY291bnQtbGlua3MiLCJ2aWV3LXByb2ZpbGUiXX19LCJzY29wZSI6Im9wZW5pZCBlbWFpbCBwcm9maWxlIiwiZW1haWxfdmVyaWZpZWQiOnRydWUsIm5hbWUiOiJtYWNoaW5lc2VucyBpb3Qgc2FuZGJveCIsInByZWZlcnJlZF91c2VybmFtZSI6Im1zc2FuZGJveCIsImdpdmVuX25hbWUiOiJtYWNoaW5lc2VucyBpb3QiLCJmYW1pbHlfbmFtZSI6InNhbmRib3giLCJlbWFpbCI6Im1zc2FuZGJveEBtYWlsaW5hdG9yLmNvbSJ9.WCyuAD4uTrY7B8AGSxFyhObcWrx5CqPBn3Wam04GaggdPQGanOyeJk28pBiLa_sYYksccDTE97f4-kaaMdP_Skaj_saRMAimrNeeWykqKiJTf5KFGyGSJHQ5U-qVx7u64JG07QN0ugT6mimlyWxs0YXDSMNAl6gzh2NhXu6zbzvFdrhjB00mAYlwnarLZszxvqTW34rPMxTDLmM-wr1iAR2Csu9NHpFIWEahqt5EmAXuMtI2v1ZiU3v_9cQzo9qrwPYzO8Vik0c9xCZLvC24jkEDZAhy3hrijy7DZ5W9oGfAJt4K5Pzk8ys5reMXN9hcDiAg6-MRmdLgvFC-D_md7w',
+    // Bearer token (will be loaded from localStorage or obtained via login)
+    bearerToken: null,
+
+    // Storage key for token
+    storageKey: 'wtp_bearer_token',
 
     // Polling interval in milliseconds (3 seconds = 3000ms)
     pollingInterval: 3000,
@@ -43,6 +46,250 @@ let isPolling = false;
 let lastFetchTime = null;
 let connectionStatus = 'disconnected'; // 'connected', 'disconnected', 'error'
 let consecutiveErrors = 0;
+let isAuthenticated = false;
+
+// ============================================================================
+// AUTHENTICATION
+// ============================================================================
+
+/**
+ * Login to get bearer token
+ * @param {string} username
+ * @param {string} password
+ * @returns {Promise<string>} Bearer token
+ */
+async function login(username, password) {
+    try {
+        const response = await fetch(API_CONFIG.authEndpoint, {
+            method: 'POST',
+            headers: {
+                'Accept': '*/*',
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ username, password })
+        });
+
+        if (!response.ok) {
+            throw new Error(`Login failed: ${response.status} ${response.statusText}`);
+        }
+
+        const data = await response.json();
+
+        if (!data.success || !data.data?.accessToken) {
+            throw new Error(data.message || 'Login failed: No access token received');
+        }
+
+        const token = data.data.accessToken;
+
+        // Store token
+        API_CONFIG.bearerToken = token;
+        localStorage.setItem(API_CONFIG.storageKey, token);
+        isAuthenticated = true;
+
+        console.log('Login successful');
+        return token;
+
+    } catch (error) {
+        console.error('Login error:', error);
+        throw error;
+    }
+}
+
+/**
+ * Load token from localStorage
+ * @returns {boolean} True if token was loaded
+ */
+function loadStoredToken() {
+    const token = localStorage.getItem(API_CONFIG.storageKey);
+    if (token) {
+        API_CONFIG.bearerToken = token;
+        isAuthenticated = true;
+        console.log('Loaded stored bearer token');
+        return true;
+    }
+    return false;
+}
+
+/**
+ * Clear stored token (logout)
+ */
+function clearToken() {
+    API_CONFIG.bearerToken = null;
+    localStorage.removeItem(API_CONFIG.storageKey);
+    isAuthenticated = false;
+    console.log('Token cleared');
+}
+
+/**
+ * Show login modal to get credentials
+ * @returns {Promise<void>}
+ */
+function showLoginModal() {
+    return new Promise((resolve, reject) => {
+        // Create modal
+        const modal = document.createElement('div');
+        modal.id = 'login-modal';
+        modal.innerHTML = `
+            <div style="
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100vw;
+                height: 100vh;
+                background: rgba(0, 0, 0, 0.9);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                z-index: 10000;
+            ">
+                <div style="
+                    background: #1a1a2e;
+                    padding: 30px;
+                    border-radius: 12px;
+                    border: 2px solid #4fc3f7;
+                    max-width: 400px;
+                    width: 90%;
+                ">
+                    <h2 style="color: #4fc3f7; margin-bottom: 20px; text-align: center;">Login Required</h2>
+                    <p style="color: #aaa; margin-bottom: 20px; font-size: 14px; text-align: center;">
+                        Enter your credentials to access the Water Treatment Plant API
+                    </p>
+
+                    <form id="login-form">
+                        <div style="margin-bottom: 15px;">
+                            <label style="color: #fff; display: block; margin-bottom: 5px; font-size: 14px;">Username</label>
+                            <input
+                                type="text"
+                                id="login-username"
+                                required
+                                style="
+                                    width: 100%;
+                                    padding: 10px;
+                                    background: #0f0f1e;
+                                    border: 1px solid #4fc3f7;
+                                    border-radius: 4px;
+                                    color: #fff;
+                                    font-size: 14px;
+                                "
+                            />
+                        </div>
+
+                        <div style="margin-bottom: 20px;">
+                            <label style="color: #fff; display: block; margin-bottom: 5px; font-size: 14px;">Password</label>
+                            <input
+                                type="password"
+                                id="login-password"
+                                required
+                                style="
+                                    width: 100%;
+                                    padding: 10px;
+                                    background: #0f0f1e;
+                                    border: 1px solid #4fc3f7;
+                                    border-radius: 4px;
+                                    color: #fff;
+                                    font-size: 14px;
+                                "
+                            />
+                        </div>
+
+                        <div id="login-error" style="
+                            color: #ff5252;
+                            margin-bottom: 15px;
+                            font-size: 13px;
+                            display: none;
+                            text-align: center;
+                        "></div>
+
+                        <button
+                            type="submit"
+                            id="login-submit-btn"
+                            style="
+                                width: 100%;
+                                padding: 12px;
+                                background: #4fc3f7;
+                                border: none;
+                                border-radius: 4px;
+                                color: #000;
+                                font-weight: bold;
+                                font-size: 14px;
+                                cursor: pointer;
+                                transition: background 0.3s;
+                            "
+                        >
+                            Login
+                        </button>
+                    </form>
+                </div>
+            </div>
+        `;
+
+        document.body.appendChild(modal);
+
+        const form = document.getElementById('login-form');
+        const usernameInput = document.getElementById('login-username');
+        const passwordInput = document.getElementById('login-password');
+        const errorDiv = document.getElementById('login-error');
+        const submitBtn = document.getElementById('login-submit-btn');
+
+        // Focus username field
+        setTimeout(() => usernameInput.focus(), 100);
+
+        // Handle form submission
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const username = usernameInput.value.trim();
+            const password = passwordInput.value;
+
+            if (!username || !password) {
+                errorDiv.textContent = 'Please enter both username and password';
+                errorDiv.style.display = 'block';
+                return;
+            }
+
+            // Disable form
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Logging in...';
+            submitBtn.style.background = '#81d4fa';
+            errorDiv.style.display = 'none';
+
+            try {
+                // Attempt login
+                await login(username, password);
+
+                // Success - close modal
+                document.body.removeChild(modal);
+                resolve();
+
+            } catch (error) {
+                // Show error
+                errorDiv.textContent = error.message || 'Login failed. Please try again.';
+                errorDiv.style.display = 'block';
+
+                // Re-enable form
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Login';
+                submitBtn.style.background = '#4fc3f7';
+                passwordInput.value = '';
+                passwordInput.focus();
+            }
+        });
+    });
+}
+
+/**
+ * Ensure user is authenticated, show login if needed
+ * @returns {Promise<void>}
+ */
+async function ensureAuthenticated() {
+    // Try to load stored token first
+    if (loadStoredToken()) {
+        return;
+    }
+
+    // No stored token, show login modal
+    await showLoginModal();
+}
 
 // ============================================================================
 // DATA TRANSFORMATION
@@ -164,7 +411,7 @@ function transformApiData(apiResponse) {
  * @returns {Promise<Object>} Transformed plant data
  */
 async function fetchPlantData() {
-    const url = `${API_CONFIG.endpoint}?assetId=${API_CONFIG.assetId}`;
+    const url = `${API_CONFIG.dataEndpoint}?assetId=${API_CONFIG.assetId}`;
 
     try {
         const response = await fetch(url, {
@@ -177,6 +424,19 @@ async function fetchPlantData() {
         });
 
         if (!response.ok) {
+            // Handle 401 Unauthorized - token expired or invalid
+            if (response.status === 401) {
+                console.warn('Authentication failed - token may be expired');
+                clearToken();
+                stopPolling();
+
+                // Show login modal to re-authenticate
+                await ensureAuthenticated();
+
+                // Retry the request with new token
+                return await fetchPlantData();
+            }
+
             throw new Error(`HTTP ${response.status}: ${response.statusText}`);
         }
 
@@ -384,18 +644,27 @@ setInterval(() => {
 /**
  * Initialize API integration
  */
-function initAPI() {
+async function initAPI() {
     console.log('API Integration initialized');
 
     // Add connection indicator to DOM if it doesn't exist
     createConnectionIndicator();
 
-    // Auto-start polling if configured
-    if (API_CONFIG.autoStart) {
-        // Wait a bit for the visualizer to load
-        setTimeout(() => {
-            startPolling();
-        }, 1000);
+    // Ensure user is authenticated
+    try {
+        await ensureAuthenticated();
+
+        // Auto-start polling if configured
+        if (API_CONFIG.autoStart) {
+            // Wait a bit for the visualizer to load
+            setTimeout(() => {
+                startPolling();
+            }, 1000);
+        }
+    } catch (error) {
+        console.error('Authentication failed:', error);
+        connectionStatus = 'error';
+        updateConnectionIndicator();
     }
 }
 
@@ -437,6 +706,15 @@ function createConnectionIndicator() {
                 font-size: 10px;
                 margin-left: 5px;
             ">Start</button>
+            <button id="api-logout-btn" style="
+                background: #ff5252;
+                border: none;
+                color: #fff;
+                padding: 4px 8px;
+                border-radius: 4px;
+                cursor: pointer;
+                font-size: 10px;
+            " title="Logout and clear token">Logout</button>
         </div>
 
         <style>
@@ -475,6 +753,28 @@ function createConnectionIndicator() {
         });
     }
 
+    // Add logout button listener
+    const logoutBtn = document.getElementById('api-logout-btn');
+    if (logoutBtn) {
+        logoutBtn.addEventListener('click', async () => {
+            if (confirm('Are you sure you want to logout? This will clear your stored token.')) {
+                stopPolling();
+                clearToken();
+
+                // Show login modal again
+                try {
+                    await ensureAuthenticated();
+                    // Restart polling if it was previously active
+                    if (API_CONFIG.autoStart) {
+                        startPolling();
+                    }
+                } catch (error) {
+                    console.error('Re-authentication failed:', error);
+                }
+            }
+        });
+    }
+
     // Update button text on initialization
     if (API_CONFIG.autoStart) {
         setTimeout(() => {
@@ -492,14 +792,25 @@ function createConnectionIndicator() {
 
 // Make functions available globally
 window.WTPAPI = {
+    // Authentication
+    login,
+    clearToken,
+    ensureAuthenticated,
+    isAuthenticated: () => isAuthenticated,
+
+    // Data fetching
     startPolling,
     stopPolling,
     togglePolling,
     fetchPlantData,
     transformApiData,
+
+    // Status
     getConnectionStatus: () => connectionStatus,
     getLastFetchTime: () => lastFetchTime,
     isPolling: () => isPolling,
+
+    // Config
     config: API_CONFIG
 };
 

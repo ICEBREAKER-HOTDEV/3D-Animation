@@ -802,7 +802,7 @@ function toggleLabels() {
 function animate() {
     requestAnimationFrame(animate);
 
-    const delta = clock.getDelta();
+    const delta = Math.min(clock.getDelta(), 0.1); // Clamp delta to max 100ms to prevent huge jumps when tab is inactive
 
     // Update controls
     controls.update();
