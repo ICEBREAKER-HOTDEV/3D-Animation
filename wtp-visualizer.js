@@ -1184,24 +1184,92 @@ function updateAlarmEffects(delta) {
     // Check for alarms and update visual effects
     activeAlarms = [];
 
-    // RWT alarms
-    if (plantData.RWT?.High_Level_Alarm) {
-        activeAlarms.push('RWT High Level');
-        pulseComponent(components.tanks.RWT, alarmPulse);
-    }
-    if (plantData.RWT?.Low_Level_Alarm) {
-        activeAlarms.push('RWT Low Level');
-        pulseComponent(components.tanks.RWT, alarmPulse);
+    // RWT alarms - check actual level
+    if (plantData.RWT?.Level !== undefined) {
+        if (plantData.RWT.Level > 90) {
+            activeAlarms.push('RWT High Level');
+            pulseComponent(components.tanks.RWT, true);  // Solid red for high
+        } else if (plantData.RWT.Level < 10) {
+            activeAlarms.push('RWT Low Level');
+            pulseComponent(components.tanks.RWT, alarmPulse);  // Blinking for low
+        } else {
+            pulseComponent(components.tanks.RWT, false);  // Normal - reset color
+        }
     }
 
-    // CWT alarms
-    if (plantData.CWT?.High_Level_Alarm) {
-        activeAlarms.push('CWT High Level');
-        pulseComponent(components.tanks.CWT, alarmPulse);
+    // CST alarms - check actual level
+    if (plantData.CST?.Level !== undefined) {
+        if (plantData.CST.Level > 90) {
+            activeAlarms.push('CST High Level');
+            pulseComponent(components.tanks.CST, true);  // Solid red for high
+        } else if (plantData.CST.Level < 10) {
+            activeAlarms.push('CST Low Level');
+            pulseComponent(components.tanks.CST, alarmPulse);  // Blinking for low
+        } else {
+            pulseComponent(components.tanks.CST, false);  // Normal - reset color
+        }
     }
-    if (plantData.CWT?.Low_Level_Alarm) {
-        activeAlarms.push('CWT Low Level');
-        pulseComponent(components.tanks.CWT, alarmPulse);
+
+    // CFT alarms - check actual level
+    if (plantData.CFT?.Level !== undefined) {
+        if (plantData.CFT.Level > 90) {
+            activeAlarms.push('CFT High Level');
+            pulseComponent(components.tanks.CFT, true);  // Solid red for high
+        } else if (plantData.CFT.Level < 10) {
+            activeAlarms.push('CFT Low Level');
+            pulseComponent(components.tanks.CFT, alarmPulse);  // Blinking for low
+        } else {
+            pulseComponent(components.tanks.CFT, false);  // Normal - reset color
+        }
+    }
+
+    // SCT alarms (array of 2 tanks) - check actual levels
+    if (Array.isArray(plantData.SCT)) {
+        plantData.SCT.forEach((tankData, index) => {
+            const tankArray = components.tanks.SCT;
+            if (tankData?.Level !== undefined && tankArray && tankArray[index]) {
+                if (tankData.Level > 90) {
+                    activeAlarms.push(`SCT ${index + 1} High Level`);
+                    pulseComponent([tankArray[index]], true);  // Solid red for high
+                } else if (tankData.Level < 10) {
+                    activeAlarms.push(`SCT ${index + 1} Low Level`);
+                    pulseComponent([tankArray[index]], alarmPulse);  // Blinking for low
+                } else {
+                    pulseComponent([tankArray[index]], false);  // Normal - reset color
+                }
+            }
+        });
+    }
+
+    // CWT alarms (array of 2 tanks) - check actual levels
+    if (Array.isArray(plantData.CWT)) {
+        plantData.CWT.forEach((tankData, index) => {
+            const tankArray = components.tanks.CWT;
+            if (tankData?.Level !== undefined && tankArray && tankArray[index]) {
+                if (tankData.Level > 90) {
+                    activeAlarms.push(`CWT ${index + 1} High Level`);
+                    pulseComponent([tankArray[index]], true);  // Solid red for high
+                } else if (tankData.Level < 10) {
+                    activeAlarms.push(`CWT ${index + 1} Low Level`);
+                    pulseComponent([tankArray[index]], alarmPulse);  // Blinking for low
+                } else {
+                    pulseComponent([tankArray[index]], false);  // Normal - reset color
+                }
+            }
+        });
+    }
+
+    // SLT alarms - check actual level
+    if (plantData.SLT?.Level !== undefined) {
+        if (plantData.SLT.Level > 90) {
+            activeAlarms.push('SLT High Level');
+            pulseComponent(components.tanks.SLT, true);  // Solid red for high
+        } else if (plantData.SLT.Level < 10) {
+            activeAlarms.push('SLT Low Level');
+            pulseComponent(components.tanks.SLT, alarmPulse);  // Blinking for low
+        } else {
+            pulseComponent(components.tanks.SLT, false);  // Normal - reset color
+        }
     }
 
     // Pump faults
@@ -1220,11 +1288,31 @@ function updateAlarmEffects(delta) {
 }
 
 function pulseComponent(component, pulse) {
-    if (component && component.material) {
-        component.material.emissive = new THREE.Color(
-            pulse ? CONFIG.colors.alarm : 0x000000
-        );
-        component.material.emissiveIntensity = pulse ? 0.5 : 0;
+    if (!component) return;
+
+    // Handle arrays of components (for tanks with multiple instances)
+    if (Array.isArray(component)) {
+        component.forEach(comp => pulseSingleComponent(comp, pulse));
+    } else {
+        pulseSingleComponent(component, pulse);
+    }
+}
+
+function pulseSingleComponent(component, pulse) {
+    if (component) {
+        // Traverse the component to find all meshes
+        component.traverse((child) => {
+            if (child.isMesh && child.material) {
+                // Handle both single material and array of materials
+                const materials = Array.isArray(child.material) ? child.material : [child.material];
+                materials.forEach(mat => {
+                    if (mat.emissive !== undefined) {
+                        mat.emissive = new THREE.Color(pulse ? CONFIG.colors.alarm : 0x000000);
+                        mat.emissiveIntensity = pulse ? 0.5 : 0;
+                    }
+                });
+            }
+        });
     }
 }
 
@@ -1406,9 +1494,7 @@ function startSimulation() {
                     Level: 50 + Math.random() * 40,
                     pH: 6.5 + Math.random() * 1.5,
                     Turbidity: 30 + Math.random() * 40,
-                    Inflow_Rate: 100 + Math.random() * 50,
-                    High_Level_Alarm: Math.random() > 0.95,
-                    Low_Level_Alarm: Math.random() > 0.95
+                    Inflow_Rate: 100 + Math.random() * 50
                 },
                 CFT: {
                     Level: 40 + Math.random() * 40,
@@ -1422,12 +1508,12 @@ function startSimulation() {
                 // SCT has 2 tanks - generate array of 2 values
                 SCT: [
                     {
-                        Level: 60 + Math.random() * 30,
+                        Level: 60 + Math.random() * 40,
                         Sludge_Level: 10 + Math.random() * 20,
                         Scraper_Status: true
                     },
                     {
-                        Level: 55 + Math.random() * 35,
+                        Level: 55 + Math.random() * 45,
                         Sludge_Level: 8 + Math.random() * 22,
                         Scraper_Status: true
                     }
@@ -1435,12 +1521,12 @@ function startSimulation() {
                 // CWT has 2 tanks - generate array of 2 values
                 CWT: [
                     {
-                        Level: 70 + Math.random() * 25,
+                        Level: 70 + Math.random() * 30,
                         pH: 6.8 + Math.random() * 0.6,
                         Residual_Chlorine: 0.5 + Math.random() * 0.8
                     },
                     {
-                        Level: 75 + Math.random() * 20,
+                        Level: 75 + Math.random() * 25,
                         pH: 6.9 + Math.random() * 0.5,
                         Residual_Chlorine: 0.6 + Math.random() * 0.7
                     }
