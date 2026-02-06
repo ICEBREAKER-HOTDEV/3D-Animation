@@ -4,7 +4,7 @@
  * This script loads a .glb model and animates it based on JSON payload data.
  * Expected node naming convention in .glb:
  * - Tanks: RWT, CST, CFT, SCT, CWT, SLT (with _Water suffix for water mesh)
- * - Pumps: CDP, PPS_Pump1, PPS_Pump2
+ * - Pumps: CDP, PPS
  * - Mixers: CFT_Mixer, SCT_Scraper
  * - Pipes: Pipe_RWT_CFT, Pipe_CFT_SCT, etc.
  * - Filters: FTR
@@ -31,7 +31,7 @@ const CONFIG = {
         ok: 0x69f0ae,
         warning: 0xffd740,
         pumpOn: 0x69f0ae,
-        pumpOff: 0x616161,
+        pumpOff: 0xff5252,  // Red when OFF
         chemical: 0xab47bc
     },
     tank: {
@@ -302,14 +302,8 @@ function mapComponent(object) {
     if (name.includes('CDP') || name.includes('DOSING')) {
         components.pumps.CDP = object;
     }
-    if (name.includes('PPS') || name.includes('PUMP')) {
-        if (name.includes('1')) {
-            components.pumps.PPS_Pump1 = object;
-        } else if (name.includes('2')) {
-            components.pumps.PPS_Pump2 = object;
-        } else {
-            components.pumps.PPS = object;
-        }
+    if (name.includes('PUMP1_') || name.includes('PPS')) {
+        components.pumps.PPS = object;
     }
 
     // Filters
@@ -1126,35 +1120,42 @@ function updatePumps(delta) {
     const cdp = components.pumps.CDP;
     if (cdp) {
         const isOn = plantData.CDP?.Status;
-        if (cdp.material) {
-            cdp.material.emissive = new THREE.Color(
-                isOn ? CONFIG.colors.pumpOn : CONFIG.colors.pumpOff
-            );
-            cdp.material.emissiveIntensity = isOn ? 0.3 + Math.sin(time * 5) * 0.1 : 0;
-        }
+        setPumpColor(cdp, isOn, time);
     }
 
-    // Main pumps
-    ['PPS_Pump1', 'PPS_Pump2'].forEach((pumpKey, index) => {
-        const pump = components.pumps[pumpKey];
-        if (pump) {
-            const isOn = index === 0
-                ? plantData.PPS?.Pump1_Status
-                : plantData.PPS?.Pump2_Status;
+    // Main pump (single)
+    const pps = components.pumps.PPS;
+    if (pps) {
+        const isOn = plantData.PPS?.Status;
+        setPumpColor(pps, isOn, time);
 
-            if (pump.material) {
-                pump.material.emissive = new THREE.Color(
-                    isOn ? CONFIG.colors.pumpOn : CONFIG.colors.pumpOff
-                );
-                pump.material.emissiveIntensity = isOn ? 0.3 + Math.sin(time * 5) * 0.1 : 0;
-            }
+        // Slight vibration when running
+        if (isOn) {
+            pps.position.y = pps.userData.originalY || pps.position.y;
+            pps.userData.originalY = pps.userData.originalY || pps.position.y;
+            pps.position.y += Math.sin(time * 30) * 0.02;
+        }
+    }
+}
 
-            // Slight vibration when running
-            if (isOn) {
-                pump.position.y = pump.userData.originalY || pump.position.y;
-                pump.userData.originalY = pump.userData.originalY || pump.position.y;
-                pump.position.y += Math.sin(time * 30) * 0.02;
-            }
+function setPumpColor(pump, isOn, time) {
+    if (!pump) return;
+
+    // Traverse pump to apply color to all meshes
+    pump.traverse((child) => {
+        if (child.isMesh && child.material) {
+            const materials = Array.isArray(child.material) ? child.material : [child.material];
+            materials.forEach(mat => {
+                if (mat.emissive !== undefined) {
+                    mat.emissive = new THREE.Color(
+                        isOn ? CONFIG.colors.pumpOn : CONFIG.colors.pumpOff
+                    );
+                    // ON: pulsing glow effect, OFF: solid red with intensity
+                    mat.emissiveIntensity = isOn
+                        ? 0.3 + Math.sin(time * 5) * 0.1  // Pulsing green glow
+                        : 0.5;  // Solid red
+                }
+            });
         }
     });
 }
@@ -1279,8 +1280,7 @@ function updateAlarmEffects(delta) {
     }
     if (plantData.PPS?.Fault) {
         activeAlarms.push('PPS Fault');
-        pulseComponent(components.pumps.PPS_Pump1, alarmPulse);
-        pulseComponent(components.pumps.PPS_Pump2, alarmPulse);
+        pulseComponent(components.pumps.PPS, alarmPulse);
     }
 
     // Update alarm panel
@@ -1382,8 +1382,7 @@ function getDefaultPayload() {
             Pump_Status: false
         },
         PPS: {
-            Pump1_Status: true,
-            Pump2_Status: false,
+            Status: true,
             Mode: 'AUTO',
             Flow_Rate: 110,
             Outlet_Pressure: 3.2,
@@ -1449,10 +1448,8 @@ function updateDashboard() {
     updateElement('cdp-rate', plantData.CDP?.Dosing_Rate?.toFixed(1) + ' L/h');
 
     // PPS
-    updateElement('pps-pump1', plantData.PPS?.Pump1_Status ? 'ON' : 'OFF',
-        plantData.PPS?.Pump1_Status ? 'ok' : '');
-    updateElement('pps-pump2', plantData.PPS?.Pump2_Status ? 'ON' : 'OFF',
-        plantData.PPS?.Pump2_Status ? 'ok' : '');
+    updateElement('pps-pump1', plantData.PPS?.Status ? 'ON' : 'OFF',
+        plantData.PPS?.Status ? 'ok' : '');
     updateElement('pps-flow', plantData.PPS?.Flow_Rate?.toFixed(0) + ' m³/h');
 
     // System mode
@@ -1536,8 +1533,7 @@ function startSimulation() {
                     Differential_Pressure: 0.5 + Math.random() * 1
                 },
                 PPS: {
-                    Pump1_Status: true,
-                    Pump2_Status: Math.random() > 0.7,
+                    Status: Math.random() > 0.3,
                     Flow_Rate: 90 + Math.random() * 40
                 },
                 CDP: {
@@ -1580,9 +1576,8 @@ function startSimulation() {
                     Differential_Pressure: 0.6 + Math.random() * 0.4
                 },
                 PPS: {
-                    Pump1_Status: manualValues.pumps.pump1,
-                    Pump2_Status: manualValues.pumps.pump2,
-                    Flow_Rate: (manualValues.pumps.pump1 ? 60 : 0) + (manualValues.pumps.pump2 ? 60 : 0)
+                    Status: manualValues.pumps.pump1,
+                    Flow_Rate: manualValues.pumps.pump1 ? 110 : 0
                 },
                 CDP: {
                     Status: manualValues.pumps.cdp,
