@@ -46,13 +46,50 @@
         }
 
         .status-section {
-            margin-bottom: 15px;
+            margin-bottom: 10px;
+            border: 1px solid rgba(79, 195, 247, 0.3);
+            border-radius: 4px;
+            overflow: hidden;
         }
 
         .status-section h3 {
             font-size: 13px;
             color: #81d4fa;
-            margin-bottom: 5px;
+            margin: 0;
+            padding: 10px;
+            background: rgba(79, 195, 247, 0.1);
+            cursor: pointer;
+            user-select: none;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: background 0.2s;
+        }
+
+        .status-section h3:hover {
+            background: rgba(79, 195, 247, 0.2);
+        }
+
+        .status-section h3::after {
+            content: '▼';
+            font-size: 10px;
+            transition: transform 0.3s;
+        }
+
+        .status-section.collapsed h3::after {
+            transform: rotate(-90deg);
+        }
+
+        .status-content {
+            max-height: 500px;
+            overflow: hidden;
+            transition: max-height 0.3s ease-out;
+            padding: 0 10px 10px 10px;
+        }
+
+        .status-section.collapsed .status-content {
+            max-height: 0;
+            padding: 0 10px;
         }
 
         .status-item {
@@ -213,58 +250,120 @@
         <h2>Plant Status Dashboard</h2>
 
         <div class="status-section" id="rwt-status">
-            <h3>Raw Water Tank (RWT)</h3>
-            <div class="status-item"><span class="label">Level</span><span class="value" id="rwt-level">--</span></div>
-            <div class="status-item"><span class="label">pH</span><span class="value" id="rwt-ph">--</span></div>
-            <div class="status-item"><span class="label">Turbidity</span><span class="value" id="rwt-turbidity">--</span></div>
-            <div class="status-item"><span class="label">Inflow</span><span class="value" id="rwt-inflow">--</span></div>
+            <h3 onclick="toggleSection('rwt-status')">Raw Water Tank (RWT)</h3>
+            <div class="status-content">
+                <div class="status-item"><span class="label">Level</span><span class="value" id="rwt-level">--</span></div>
+                <div class="status-item"><span class="label">High Level Alarm</span><span class="value" id="rwt-high-alarm">--</span></div>
+                <div class="status-item"><span class="label">Low Level Alarm</span><span class="value" id="rwt-low-alarm">--</span></div>
+                <div class="status-item"><span class="label">pH</span><span class="value" id="rwt-ph">--</span></div>
+                <div class="status-item"><span class="label">Turbidity</span><span class="value" id="rwt-turbidity">--</span></div>
+                <div class="status-item"><span class="label">Inflow Rate</span><span class="value" id="rwt-inflow">--</span></div>
+                <div class="status-item"><span class="label">Outflow Rate</span><span class="value" id="rwt-outflow">--</span></div>
+            </div>
         </div>
 
-        <div class="status-section" id="cft-status">
-            <h3>Coagulation Tank (CFT)</h3>
-            <div class="status-item"><span class="label">Level</span><span class="value" id="cft-level">--</span></div>
-            <div class="status-item"><span class="label">Mixer</span><span class="value" id="cft-mixer">--</span></div>
-            <div class="status-item"><span class="label">pH</span><span class="value" id="cft-ph">--</span></div>
+        <div class="status-section collapsed" id="cst-status">
+            <h3 onclick="toggleSection('cst-status')">Chemical Storage Tank (CST)</h3>
+            <div class="status-content">
+                <div class="status-item"><span class="label">Level</span><span class="value" id="cst-level">--</span></div>
+                <div class="status-item"><span class="label">Low Level Alarm</span><span class="value" id="cst-low-alarm">--</span></div>
+            </div>
         </div>
 
-        <div class="status-section" id="sct-status">
-            <h3>Sedimentation Tank (SCT)</h3>
-            <div class="status-item"><span class="label">Level</span><span class="value" id="sct-level">--</span></div>
-            <div class="status-item"><span class="label">Sludge</span><span class="value" id="sct-sludge">--</span></div>
-            <div class="status-item"><span class="label">Scraper</span><span class="value" id="sct-scraper">--</span></div>
+        <div class="status-section collapsed" id="cft-status">
+            <h3 onclick="toggleSection('cft-status')">Coagulation Tank (CFT)</h3>
+            <div class="status-content">
+                <div class="status-item"><span class="label">Level</span><span class="value" id="cft-level">--</span></div>
+                <div class="status-item"><span class="label">Mixer Status</span><span class="value" id="cft-mixer">--</span></div>
+                <div class="status-item"><span class="label">pH</span><span class="value" id="cft-ph">--</span></div>
+                <div class="status-item"><span class="label">Turbidity</span><span class="value" id="cft-turbidity">--</span></div>
+                <div class="status-item"><span class="label">Dosing Rate</span><span class="value" id="cft-dosing">--</span></div>
+            </div>
         </div>
 
-        <div class="status-section" id="ftr-status">
-            <h3>Filter Unit (FTR)</h3>
-            <div class="status-item"><span class="label">Flow Rate</span><span class="value" id="ftr-flow">--</span></div>
-            <div class="status-item"><span class="label">Pressure</span><span class="value" id="ftr-pressure">--</span></div>
-            <div class="status-item"><span class="label">Backwash</span><span class="value" id="ftr-backwash">--</span></div>
+        <div class="status-section collapsed" id="sct-status">
+            <h3 onclick="toggleSection('sct-status')">Sedimentation Tank (SCT)</h3>
+            <div class="status-content">
+                <div class="status-item"><span class="label">Level</span><span class="value" id="sct-level">--</span></div>
+                <div class="status-item"><span class="label">Sludge Level</span><span class="value" id="sct-sludge">--</span></div>
+                <div class="status-item"><span class="label">Turbidity Outlet</span><span class="value" id="sct-turbidity">--</span></div>
+                <div class="status-item"><span class="label">Scraper Status</span><span class="value" id="sct-scraper">--</span></div>
+            </div>
         </div>
 
-        <div class="status-section" id="cwt-status">
-            <h3>Clean Water Tank (CWT)</h3>
-            <div class="status-item"><span class="label">Level</span><span class="value" id="cwt-level">--</span></div>
-            <div class="status-item"><span class="label">pH</span><span class="value" id="cwt-ph">--</span></div>
-            <div class="status-item"><span class="label">Chlorine</span><span class="value" id="cwt-chlorine">--</span></div>
+        <div class="status-section collapsed" id="ftr-status">
+            <h3 onclick="toggleSection('ftr-status')">Filter Unit (FTR)</h3>
+            <div class="status-content">
+                <div class="status-item"><span class="label">Flow Rate</span><span class="value" id="ftr-flow">--</span></div>
+                <div class="status-item"><span class="label">Differential Pressure</span><span class="value" id="ftr-pressure">--</span></div>
+                <div class="status-item"><span class="label">Backwash Status</span><span class="value" id="ftr-backwash">--</span></div>
+            </div>
         </div>
 
-        <div class="status-section" id="cdp-status">
-            <h3>Chemical Dosing (CDP)</h3>
-            <div class="status-item"><span class="label">Status</span><span class="value" id="cdp-status-val">--</span></div>
-            <div class="status-item"><span class="label">Mode</span><span class="value" id="cdp-mode">--</span></div>
-            <div class="status-item"><span class="label">Dosing Rate</span><span class="value" id="cdp-rate">--</span></div>
+        <div class="status-section collapsed" id="cwt-status">
+            <h3 onclick="toggleSection('cwt-status')">Clean Water Tank (CWT)</h3>
+            <div class="status-content">
+                <div class="status-item"><span class="label">Level</span><span class="value" id="cwt-level">--</span></div>
+                <div class="status-item"><span class="label">High Level Alarm</span><span class="value" id="cwt-high-alarm">--</span></div>
+                <div class="status-item"><span class="label">Low Level Alarm</span><span class="value" id="cwt-low-alarm">--</span></div>
+                <div class="status-item"><span class="label">pH</span><span class="value" id="cwt-ph">--</span></div>
+                <div class="status-item"><span class="label">Turbidity</span><span class="value" id="cwt-turbidity">--</span></div>
+                <div class="status-item"><span class="label">Residual Chlorine</span><span class="value" id="cwt-chlorine">--</span></div>
+            </div>
         </div>
 
-        <div class="status-section" id="pps-status">
-            <h3>Pump System (PPS)</h3>
-            <div class="status-item"><span class="label">Pump</span><span class="value" id="pps-pump1">--</span></div>
-            <!-- <div class="status-item"><span class="label">Pump 2</span><span class="value" id="pps-pump2">--</span></div> -->
-            <div class="status-item"><span class="label">Flow Rate</span><span class="value" id="pps-flow">--</span></div>
+        <div class="status-section collapsed" id="slt-status">
+            <h3 onclick="toggleSection('slt-status')">Sludge Tank (SLT)</h3>
+            <div class="status-content">
+                <div class="status-item"><span class="label">Level</span><span class="value" id="slt-level">--</span></div>
+                <div class="status-item"><span class="label">Pump Status</span><span class="value" id="slt-pump">--</span></div>
+            </div>
+        </div>
+
+        <div class="status-section collapsed" id="cdp-status">
+            <h3 onclick="toggleSection('cdp-status')">Chemical Dosing Pump (CDP)</h3>
+            <div class="status-content">
+                <div class="status-item"><span class="label">Status</span><span class="value" id="cdp-status-val">--</span></div>
+                <div class="status-item"><span class="label">Mode</span><span class="value" id="cdp-mode">--</span></div>
+                <div class="status-item"><span class="label">Dosing Rate</span><span class="value" id="cdp-rate">--</span></div>
+                <div class="status-item"><span class="label">Total Chemical Used</span><span class="value" id="cdp-total">--</span></div>
+                <div class="status-item"><span class="label">Pressure</span><span class="value" id="cdp-pressure">--</span></div>
+                <div class="status-item"><span class="label">Fault</span><span class="value" id="cdp-fault">--</span></div>
+            </div>
+        </div>
+
+        <div class="status-section collapsed" id="pps-status">
+            <h3 onclick="toggleSection('pps-status')">Main Pump Station (PPS)</h3>
+            <div class="status-content">
+                <div class="status-item"><span class="label">Status</span><span class="value" id="pps-pump1">--</span></div>
+                <div class="status-item"><span class="label">Mode</span><span class="value" id="pps-mode">--</span></div>
+                <div class="status-item"><span class="label">Flow Rate</span><span class="value" id="pps-flow">--</span></div>
+                <div class="status-item"><span class="label">Outlet Pressure</span><span class="value" id="pps-pressure">--</span></div>
+                <div class="status-item"><span class="label">Fault</span><span class="value" id="pps-fault">--</span></div>
+            </div>
+        </div>
+
+        <div class="status-section collapsed" id="plt-status">
+            <h3 onclick="toggleSection('plt-status')">Plant Overall (PLT)</h3>
+            <div class="status-content">
+                <div class="status-item"><span class="label">Total Inflow</span><span class="value" id="plt-inflow">--</span></div>
+                <div class="status-item"><span class="label">Total Outflow</span><span class="value" id="plt-outflow">--</span></div>
+                <div class="status-item"><span class="label">System Mode</span><span class="value" id="plt-mode">--</span></div>
+                <div class="status-item"><span class="label">Alarm Status</span><span class="value" id="plt-alarm">--</span></div>
+            </div>
         </div>
     </div>
 
+    <script>
+        function toggleSection(sectionId) {
+            const section = document.getElementById(sectionId);
+            section.classList.toggle('collapsed');
+        }
+    </script>
+
     <div id="mode-indicator">
-        System Mode: <span class="mode" id="system-mode">AUTO</span>
+        System Mode: <span class="mode" id="system-mode">AUTO</span><br>
+        <span style="font-size: 10px; color: #888;" id="data-source">Data: Loading...</span>
     </div>
 
     <div id="alarm-panel">
@@ -275,7 +374,7 @@
     <div id="controls">
         <button id="btn-reset-view">Reset View</button>
         <button id="btn-toggle-labels">Toggle Labels</button>
-        <button id="btn-simulate">Simulate Data</button>
+        <!-- <button id="btn-simulate">Simulate Data</button> -->
         <!-- <button id="btn-zoom-in">Zoom In (+)</button>
         <button id="btn-zoom-out">Zoom Out (-)</button> -->
     </div>
@@ -289,6 +388,9 @@
         }
     }
     </script>
+
+    <!-- API Integration -->
+    <script src="api-config.js"></script>
 
     <script type="module" src="wtp-visualizer.js"></script>
 </body>

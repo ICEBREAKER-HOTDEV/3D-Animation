@@ -220,6 +220,10 @@ function loadModel() {
 
             console.log('Model loaded successfully');
             console.log('Mapped components:', components);
+            console.log('Pumps found:', {
+                CDP: components.pumps.CDP ? 'YES' : 'NO',
+                PPS: components.pumps.PPS ? 'YES' : 'NO'
+            });
         },
         (progress) => {
             const percent = (progress.loaded / progress.total * 100).toFixed(0);
@@ -299,7 +303,7 @@ function mapComponent(object) {
     }
 
     // Pumps
-    if (name.includes('CDP') || name.includes('DOSING')) {
+    if (name.includes('CDP') || name.includes('PUMP2_')) {
         components.pumps.CDP = object;
     }
     if (name.includes('PUMP1_') || name.includes('PPS')) {
@@ -700,27 +704,35 @@ function createLabels() {
     pumpLabels.forEach(({ key, text, dataKey }) => {
         const pump = components.pumps[key];
         if (pump) {
-            const label = createLabel(text, dataKey);
+            const label = createLabel(text, dataKey, null, 'small');
             pump.add(label);
             components.labels[key] = label;
         }
     });
 }
 
-function createLabel(text, dataKey, index = null) {
+function createLabel(text, dataKey, index = null, size = 'normal') {
     const div = document.createElement('div');
     div.className = 'label-3d';
     const labelId = index !== null ? `label-${dataKey}-${index}` : `label-${dataKey}`;
+
+    // Size configurations
+    const sizes = {
+        small: { fontSize: '9px', padding: '3px 6px', titleSize: '9px' },
+        normal: { fontSize: '11px', padding: '5px 10px', titleSize: '11px' }
+    };
+    const config = sizes[size] || sizes.normal;
+
     div.innerHTML = `
         <div style="
             background: rgba(0,0,0,0.8);
-            padding: 5px 10px;
+            padding: ${config.padding};
             border-radius: 4px;
-            font-size: 11px;
+            font-size: ${config.fontSize};
             white-space: nowrap;
             border-left: 3px solid #4fc3f7;
         ">
-            <div style="color: #4fc3f7; font-weight: bold;">${text}</div>
+            <div style="color: #4fc3f7; font-weight: bold; font-size: ${config.titleSize};">${text}</div>
             <div style="color: #fff;" id="${labelId}">--</div>
         </div>
     `;
@@ -1146,29 +1158,62 @@ function updateMixers(delta) {
 function updatePumps(delta) {
     const time = clock.getElapsedTime();
 
-    // Chemical Dosing Pump
+    // Chemical Dosing Pump (PUMP2)
     const cdp = components.pumps.CDP;
     if (cdp) {
         const isOn = plantData.CDP?.Status;
-        setPumpColor(cdp, isOn, time);
+        const hasFault = plantData.CDP?.Fault;
+
+        // Debug: Log pump status (only occasionally to avoid spam)
+        if (Math.random() < 0.01) {
+            console.log('CDP Status:', { isOn, hasFault, hasComponent: !!cdp });
+        }
+
+        setPumpColor(cdp, isOn, hasFault, time);
+
+        // Slight vibration when running
+        if (isOn && !hasFault) {
+            if (!cdp.userData.originalY) {
+                cdp.userData.originalY = cdp.position.y;
+            }
+            cdp.position.y = cdp.userData.originalY + Math.sin(time * 30) * 0.02;
+        } else {
+            // Reset to original position when off or fault
+            if (cdp.userData.originalY !== undefined) {
+                cdp.position.y = cdp.userData.originalY;
+            }
+        }
     }
 
-    // Main pump (single)
+    // Main Pump Station (PUMP1)
     const pps = components.pumps.PPS;
     if (pps) {
         const isOn = plantData.PPS?.Status;
-        setPumpColor(pps, isOn, time);
+        const hasFault = plantData.PPS?.Fault;
+
+        // Debug: Log pump status (only occasionally to avoid spam)
+        if (Math.random() < 0.01) {
+            console.log('PPS Status:', { isOn, hasFault, hasComponent: !!pps });
+        }
+
+        setPumpColor(pps, isOn, hasFault, time);
 
         // Slight vibration when running
-        if (isOn) {
-            pps.position.y = pps.userData.originalY || pps.position.y;
-            pps.userData.originalY = pps.userData.originalY || pps.position.y;
-            pps.position.y += Math.sin(time * 30) * 0.02;
+        if (isOn && !hasFault) {
+            if (!pps.userData.originalY) {
+                pps.userData.originalY = pps.position.y;
+            }
+            pps.position.y = pps.userData.originalY + Math.sin(time * 30) * 0.02;
+        } else {
+            // Reset to original position when off or fault
+            if (pps.userData.originalY !== undefined) {
+                pps.position.y = pps.userData.originalY;
+            }
         }
     }
 }
 
-function setPumpColor(pump, isOn, time) {
+function setPumpColor(pump, isOn, hasFault, time) {
     if (!pump) return;
 
     // Traverse pump to apply color only to pump meshes (clone materials to avoid affecting other objects)
@@ -1187,13 +1232,20 @@ function setPumpColor(pump, isOn, time) {
             const materials = Array.isArray(child.material) ? child.material : [child.material];
             materials.forEach(mat => {
                 if (mat.emissive !== undefined) {
-                    mat.emissive = new THREE.Color(
-                        isOn ? CONFIG.colors.pumpOn : CONFIG.colors.pumpOff
-                    );
-                    // ON: pulsing glow effect, OFF: solid red with intensity
-                    mat.emissiveIntensity = isOn
-                        ? 0.3 + Math.sin(time * 5) * 0.1  // Pulsing green glow
-                        : 0.5;  // Solid red
+                    // Priority: Fault > On > Off
+                    if (hasFault) {
+                        // FAULT: Blinking red alarm
+                        mat.emissive = new THREE.Color(CONFIG.colors.alarm);
+                        mat.emissiveIntensity = Math.sin(time * 5) > 0 ? 0.8 : 0.2;
+                    } else if (isOn) {
+                        // ON: Pulsing green glow
+                        mat.emissive = new THREE.Color(CONFIG.colors.pumpOn);
+                        mat.emissiveIntensity = 0.3 + Math.sin(time * 5) * 0.1;
+                    } else {
+                        // OFF: Solid red
+                        mat.emissive = new THREE.Color(CONFIG.colors.pumpOff);
+                        mat.emissiveIntensity = 0.5;
+                    }
                 }
             });
         }
@@ -1230,12 +1282,12 @@ function updateAlarmEffects(delta) {
     // Check for alarms and update visual effects
     activeAlarms = [];
 
-    // RWT alarms - check actual level
-    if (plantData.RWT?.Level !== undefined) {
-        if (plantData.RWT.Level > 90) {
+    // RWT alarms - use API alarm flags
+    if (plantData.RWT) {
+        if (plantData.RWT.High_Level_Alarm) {
             activeAlarms.push('RWT High Level');
             pulseComponent(components.tanks.RWT, true);  // Solid red for high
-        } else if (plantData.RWT.Level < 10) {
+        } else if (plantData.RWT.Low_Level_Alarm) {
             activeAlarms.push('RWT Low Level');
             pulseComponent(components.tanks.RWT, alarmPulse);  // Blinking for low
         } else {
@@ -1243,12 +1295,9 @@ function updateAlarmEffects(delta) {
         }
     }
 
-    // CST alarms - check actual level
-    if (plantData.CST?.Level !== undefined) {
-        if (plantData.CST.Level > 90) {
-            activeAlarms.push('CST High Level');
-            pulseComponent(components.tanks.CST, true);  // Solid red for high
-        } else if (plantData.CST.Level < 10) {
+    // CST alarms - use API alarm flags
+    if (plantData.CST) {
+        if (plantData.CST.Low_Level_Alarm) {
             activeAlarms.push('CST Low Level');
             pulseComponent(components.tanks.CST, alarmPulse);  // Blinking for low
         } else {
@@ -1256,46 +1305,28 @@ function updateAlarmEffects(delta) {
         }
     }
 
-    // CFT alarms - check actual level
-    if (plantData.CFT?.Level !== undefined) {
-        if (plantData.CFT.Level > 90) {
-            activeAlarms.push('CFT High Level');
-            pulseComponent(components.tanks.CFT, true);  // Solid red for high
-        } else if (plantData.CFT.Level < 10) {
-            activeAlarms.push('CFT Low Level');
-            pulseComponent(components.tanks.CFT, alarmPulse);  // Blinking for low
-        } else {
-            pulseComponent(components.tanks.CFT, false);  // Normal - reset color
-        }
-    }
+    // CFT alarms - no alarm flags in API, so skip visual alarms
+    pulseComponent(components.tanks.CFT, false);
 
-    // SCT alarms (array of 2 tanks) - check actual levels
+    // SCT alarms - no alarm flags in API, so skip visual alarms
     if (Array.isArray(plantData.SCT)) {
         plantData.SCT.forEach((tankData, index) => {
             const tankArray = components.tanks.SCT;
-            if (tankData?.Level !== undefined && tankArray && tankArray[index]) {
-                if (tankData.Level > 90) {
-                    activeAlarms.push(`SCT ${index + 1} High Level`);
-                    pulseComponent([tankArray[index]], true);  // Solid red for high
-                } else if (tankData.Level < 10) {
-                    activeAlarms.push(`SCT ${index + 1} Low Level`);
-                    pulseComponent([tankArray[index]], alarmPulse);  // Blinking for low
-                } else {
-                    pulseComponent([tankArray[index]], false);  // Normal - reset color
-                }
+            if (tankArray && tankArray[index]) {
+                pulseComponent([tankArray[index]], false);
             }
         });
     }
 
-    // CWT alarms (array of 2 tanks) - check actual levels
+    // CWT alarms (array of 2 tanks) - use API alarm flags
     if (Array.isArray(plantData.CWT)) {
         plantData.CWT.forEach((tankData, index) => {
             const tankArray = components.tanks.CWT;
-            if (tankData?.Level !== undefined && tankArray && tankArray[index]) {
-                if (tankData.Level > 90) {
+            if (tankData && tankArray && tankArray[index]) {
+                if (tankData.High_Level_Alarm) {
                     activeAlarms.push(`CWT ${index + 1} High Level`);
                     pulseComponent([tankArray[index]], true);  // Solid red for high
-                } else if (tankData.Level < 10) {
+                } else if (tankData.Low_Level_Alarm) {
                     activeAlarms.push(`CWT ${index + 1} Low Level`);
                     pulseComponent([tankArray[index]], alarmPulse);  // Blinking for low
                 } else {
@@ -1305,27 +1336,18 @@ function updateAlarmEffects(delta) {
         });
     }
 
-    // SLT alarms - check actual level
-    if (plantData.SLT?.Level !== undefined) {
-        if (plantData.SLT.Level > 90) {
-            activeAlarms.push('SLT High Level');
-            pulseComponent(components.tanks.SLT, true);  // Solid red for high
-        } else if (plantData.SLT.Level < 10) {
-            activeAlarms.push('SLT Low Level');
-            pulseComponent(components.tanks.SLT, alarmPulse);  // Blinking for low
-        } else {
-            pulseComponent(components.tanks.SLT, false);  // Normal - reset color
-        }
-    }
+    // SLT alarms - no alarm flags in API, so skip visual alarms
+    pulseComponent(components.tanks.SLT, false);
 
-    // Pump faults
+    // Pump faults - use API fault flags
+    // NOTE: Don't override pump colors here - let updatePumps() handle normal on/off colors
+    // Only add to alarm list, visual effects handled by updatePumps()
     if (plantData.CDP?.Fault) {
         activeAlarms.push('CDP Fault');
-        pulseComponent(components.pumps.CDP, alarmPulse);
     }
+
     if (plantData.PPS?.Fault) {
         activeAlarms.push('PPS Fault');
-        pulseComponent(components.pumps.PPS, alarmPulse);
     }
 
     // Update alarm panel
@@ -1457,47 +1479,87 @@ function updatePlantData(payload) {
 }
 
 function updateDashboard() {
-    // RWT
+    // RWT - Raw Water Tank
     updateElement('rwt-level', plantData.RWT?.Level?.toFixed(1) + '%');
+    updateElement('rwt-high-alarm', plantData.RWT?.High_Level_Alarm ? 'YES' : 'NO',
+        plantData.RWT?.High_Level_Alarm ? 'alarm' : 'ok');
+    updateElement('rwt-low-alarm', plantData.RWT?.Low_Level_Alarm ? 'YES' : 'NO',
+        plantData.RWT?.Low_Level_Alarm ? 'alarm' : 'ok');
     updateElement('rwt-ph', plantData.RWT?.pH?.toFixed(1));
     updateElement('rwt-turbidity', plantData.RWT?.Turbidity?.toFixed(1) + ' NTU');
-    updateElement('rwt-inflow', plantData.RWT?.Inflow_Rate?.toFixed(0) + ' m³/h');
+    updateElement('rwt-inflow', plantData.RWT?.Inflow_Rate?.toFixed(1) + ' m³/h');
+    updateElement('rwt-outflow', plantData.RWT?.Outflow_Rate?.toFixed(1) + ' m³/h');
 
-    // CFT
+    // CST - Chemical Storage Tank
+    updateElement('cst-level', plantData.CST?.Level?.toFixed(1) + '%');
+    updateElement('cst-low-alarm', plantData.CST?.Low_Level_Alarm ? 'YES' : 'NO',
+        plantData.CST?.Low_Level_Alarm ? 'alarm' : 'ok');
+
+    // CFT - Coagulation/Flocculation Tank
     updateElement('cft-level', plantData.CFT?.Level?.toFixed(1) + '%');
     updateElement('cft-mixer', plantData.CFT?.Mixer_Status ? 'ON' : 'OFF',
         plantData.CFT?.Mixer_Status ? 'ok' : '');
     updateElement('cft-ph', plantData.CFT?.pH?.toFixed(1));
+    updateElement('cft-turbidity', plantData.CFT?.Turbidity?.toFixed(1) + ' NTU');
+    updateElement('cft-dosing', plantData.CFT?.Dosing_Rate?.toFixed(1) + ' L/h');
 
-    // SCT
-    updateElement('sct-level', plantData.SCT?.Level?.toFixed(1) + '%');
-    updateElement('sct-sludge', plantData.SCT?.Sludge_Level?.toFixed(1) + '%');
-    updateElement('sct-scraper', plantData.SCT?.Scraper_Status ? 'ON' : 'OFF',
-        plantData.SCT?.Scraper_Status ? 'ok' : '');
+    // SCT - Sedimentation/Clarification Tank (use first tank if array)
+    const sctData = Array.isArray(plantData.SCT) ? plantData.SCT[0] : plantData.SCT;
+    updateElement('sct-level', sctData?.Level?.toFixed(1) + '%');
+    updateElement('sct-sludge', sctData?.Sludge_Level?.toFixed(1) + '%');
+    updateElement('sct-turbidity', sctData?.Turbidity_Outlet?.toFixed(1) + ' NTU');
+    updateElement('sct-scraper', sctData?.Scraper_Status ? 'ON' : 'OFF',
+        sctData?.Scraper_Status ? 'ok' : '');
 
-    // FTR
-    updateElement('ftr-flow', plantData.FTR?.Flow_Rate?.toFixed(0) + ' m³/h');
+    // FTR - Filter
+    updateElement('ftr-flow', plantData.FTR?.Flow_Rate?.toFixed(1) + ' m³/h');
     updateElement('ftr-pressure', plantData.FTR?.Differential_Pressure?.toFixed(2) + ' bar');
     updateElement('ftr-backwash', plantData.FTR?.Backwash_Status ? 'ACTIVE' : 'OFF',
         plantData.FTR?.Backwash_Status ? 'warning' : '');
 
-    // CWT
-    updateElement('cwt-level', plantData.CWT?.Level?.toFixed(1) + '%');
-    updateElement('cwt-ph', plantData.CWT?.pH?.toFixed(1));
-    updateElement('cwt-chlorine', plantData.CWT?.Residual_Chlorine?.toFixed(2) + ' mg/L');
+    // CWT - Clean Water Tank (use first tank if array)
+    const cwtData = Array.isArray(plantData.CWT) ? plantData.CWT[0] : plantData.CWT;
+    updateElement('cwt-level', cwtData?.Level?.toFixed(1) + '%');
+    updateElement('cwt-high-alarm', cwtData?.High_Level_Alarm ? 'YES' : 'NO',
+        cwtData?.High_Level_Alarm ? 'alarm' : 'ok');
+    updateElement('cwt-low-alarm', cwtData?.Low_Level_Alarm ? 'YES' : 'NO',
+        cwtData?.Low_Level_Alarm ? 'alarm' : 'ok');
+    updateElement('cwt-ph', cwtData?.pH?.toFixed(1));
+    updateElement('cwt-turbidity', cwtData?.Turbidity?.toFixed(1) + ' NTU');
+    updateElement('cwt-chlorine', cwtData?.Residual_Chlorine?.toFixed(2) + ' mg/L');
 
-    // CDP
+    // SLT - Sludge Tank
+    updateElement('slt-level', plantData.SLT?.Level?.toFixed(1) + '%');
+    updateElement('slt-pump', plantData.SLT?.Pump_Status ? 'ON' : 'OFF',
+        plantData.SLT?.Pump_Status ? 'ok' : '');
+
+    // CDP - Chemical Dosing Pump
     updateElement('cdp-status-val', plantData.CDP?.Status ? 'ON' : 'OFF',
         plantData.CDP?.Status ? 'ok' : '');
     updateElement('cdp-mode', plantData.CDP?.Mode);
     updateElement('cdp-rate', plantData.CDP?.Dosing_Rate?.toFixed(1) + ' L/h');
+    updateElement('cdp-total', plantData.CDP?.Total_Chemical_Used?.toFixed(0) + ' L');
+    updateElement('cdp-pressure', plantData.CDP?.Pressure?.toFixed(1) + ' bar');
+    updateElement('cdp-fault', plantData.CDP?.Fault ? 'YES' : 'NO',
+        plantData.CDP?.Fault ? 'alarm' : 'ok');
 
-    // PPS
+    // PPS - Main Pump Station
     updateElement('pps-pump1', plantData.PPS?.Status ? 'ON' : 'OFF',
         plantData.PPS?.Status ? 'ok' : '');
-    updateElement('pps-flow', plantData.PPS?.Flow_Rate?.toFixed(0) + ' m³/h');
+    updateElement('pps-mode', plantData.PPS?.Mode);
+    updateElement('pps-flow', plantData.PPS?.Flow_Rate?.toFixed(1) + ' m³/h');
+    updateElement('pps-pressure', plantData.PPS?.Outlet_Pressure?.toFixed(1) + ' bar');
+    updateElement('pps-fault', plantData.PPS?.Fault ? 'YES' : 'NO',
+        plantData.PPS?.Fault ? 'alarm' : 'ok');
 
-    // System mode
+    // PLT - Plant Overall
+    updateElement('plt-inflow', plantData.PLT?.Total_Inflow?.toFixed(1) + ' m³/h');
+    updateElement('plt-outflow', plantData.PLT?.Total_Outflow?.toFixed(1) + ' m³/h');
+    updateElement('plt-mode', plantData.PLT?.System_Mode || 'AUTO');
+    updateElement('plt-alarm', plantData.PLT?.Alarm_Status ? 'YES' : 'NO',
+        plantData.PLT?.Alarm_Status ? 'alarm' : 'ok');
+
+    // System mode indicator
     const modeEl = document.getElementById('system-mode');
     if (modeEl) {
         modeEl.textContent = plantData.PLT?.System_Mode || 'AUTO';
@@ -1522,6 +1584,13 @@ let simulationInterval = null;
 
 function startSimulation() {
     if (simulationInterval) return;
+
+    // Update data source indicator
+    const dataSource = document.getElementById('data-source');
+    if (dataSource) {
+        dataSource.textContent = 'Data: Simulation';
+        dataSource.style.color = '#ffd740';
+    }
 
     // Show manual controls panel
     // document.getElementById('manual-controls').classList.add('active');
@@ -1644,6 +1713,13 @@ function stopSimulation() {
         simulationInterval = null;
     }
 
+    // Update data source indicator
+    const dataSource = document.getElementById('data-source');
+    if (dataSource) {
+        dataSource.textContent = 'Data: Stopped';
+        dataSource.style.color = '#888';
+    }
+
     // Hide manual controls panel
     // document.getElementById('manual-controls').classList.remove('active');
 }
@@ -1683,18 +1759,26 @@ function setupControls() {
 
     document.getElementById('btn-toggle-labels').addEventListener('click', toggleLabels);
 
-    const simBtn = document.getElementById('btn-simulate');
-    simBtn.addEventListener('click', () => {
-        if (simulationInterval) {
-            stopSimulation();
-            simBtn.classList.remove('active');
-            simBtn.textContent = 'Simulate Data';
-        } else {
-            startSimulation();
-            simBtn.classList.add('active');
-            simBtn.textContent = 'Stop Simulation';
-        }
-    });
+    // const simBtn = document.getElementById('btn-simulate');
+    // simBtn.addEventListener('click', () => {
+    //     if (simulationInterval) {
+    //         stopSimulation();
+    //         simBtn.classList.remove('active');
+    //         simBtn.textContent = 'Simulate Data';
+    //         // Restart API polling if available
+    //         if (window.WTPAPI && !window.WTPAPI.isPolling()) {
+    //             window.WTPAPI.startPolling();
+    //         }
+    //     } else {
+    //         // Stop API polling when starting simulation
+    //         if (window.WTPAPI && window.WTPAPI.isPolling()) {
+    //             window.WTPAPI.stopPolling();
+    //         }
+    //         startSimulation();
+    //         simBtn.classList.add('active');
+    //         simBtn.textContent = 'Stop Simulation';
+    //     }
+    // });
 
     // document.getElementById('btn-zoom-in').addEventListener('click', zoomIn);
     // document.getElementById('btn-zoom-out').addEventListener('click', zoomOut);
