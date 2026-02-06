@@ -690,6 +690,21 @@ function createLabels() {
             });
         }
     });
+
+    // Create labels for pumps
+    const pumpLabels = [
+        { key: 'CDP', text: 'Chemical Dosing Pump', dataKey: 'cdp' },
+        { key: 'PPS', text: 'Main Pump', dataKey: 'pps' }
+    ];
+
+    pumpLabels.forEach(({ key, text, dataKey }) => {
+        const pump = components.pumps[key];
+        if (pump) {
+            const label = createLabel(text, dataKey);
+            pump.add(label);
+            components.labels[key] = label;
+        }
+    });
 }
 
 function createLabel(text, dataKey, index = null) {
@@ -743,6 +758,21 @@ function updateLabels() {
             const el = document.getElementById(`label-cwt-${index}`);
             if (el) el.textContent = `Level: ${tankData?.Level?.toFixed(1) || '--'}%`;
         });
+    }
+
+    // Update pump labels
+    const cdpEl = document.getElementById('label-cdp');
+    if (cdpEl) {
+        const cdpStatus = plantData.CDP?.Status ? 'ON' : 'OFF';
+        cdpEl.textContent = `Status: ${cdpStatus}`;
+        cdpEl.style.color = plantData.CDP?.Status ? '#69f0ae' : '#ff5252';
+    }
+
+    const ppsEl = document.getElementById('label-pps');
+    if (ppsEl) {
+        const ppsStatus = plantData.PPS?.Status ? 'ON' : 'OFF';
+        ppsEl.textContent = `Status: ${ppsStatus}`;
+        ppsEl.style.color = plantData.PPS?.Status ? '#69f0ae' : '#ff5252';
     }
 }
 
