@@ -1171,9 +1171,19 @@ function updatePumps(delta) {
 function setPumpColor(pump, isOn, time) {
     if (!pump) return;
 
-    // Traverse pump to apply color to all meshes
+    // Traverse pump to apply color only to pump meshes (clone materials to avoid affecting other objects)
     pump.traverse((child) => {
         if (child.isMesh && child.material) {
+            // Clone materials on first use so shared materials on other objects are not affected
+            if (!child.userData.pumpMaterialCloned) {
+                if (Array.isArray(child.material)) {
+                    child.material = child.material.map(mat => mat.clone());
+                } else {
+                    child.material = child.material.clone();
+                }
+                child.userData.pumpMaterialCloned = true;
+            }
+
             const materials = Array.isArray(child.material) ? child.material : [child.material];
             materials.forEach(mat => {
                 if (mat.emissive !== undefined) {
@@ -1197,6 +1207,11 @@ function updatePipeFlows(delta) {
 
     Object.values(components.pipes).forEach(pipe => {
         if (pipe.material && flowRate > 0) {
+            // Clone material on first use so shared materials on other objects are not affected
+            if (!pipe.userData.pipeMaterialCloned) {
+                pipe.material = pipe.material.clone();
+                pipe.userData.pipeMaterialCloned = true;
+            }
             // Create flowing effect using texture offset or color pulse
             if (pipe.material.map) {
                 pipe.material.map.offset.x += delta * flowRate * 0.01;
